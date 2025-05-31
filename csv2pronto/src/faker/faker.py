@@ -8,6 +8,7 @@ class Faker:
         "argenprop": "site1",
         "mercadolibre": "site2",
         "zonaprop": "site3",
+        "desconocido": "site4"
     }
 
     @classmethod
@@ -18,7 +19,16 @@ class Faker:
         if row.get("listing_id", None):
             row["listing_id"] = cls.id(row["listing_id"])
 
-        row["site"] = cls.site(row["site"])
+        # Mariano: Colocar un sitio temporal mientras
+        #          averiguo una mejor opción
+        sitio_temp = "site4"
+
+        #          Hacer un try por si falta este atributo
+        try:
+            row["site"] = cls.site(row["site"])
+        except KeyError as ke:
+            row["site"] = sitio_temp
+
         row["url"] = None
 
         return row

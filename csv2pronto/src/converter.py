@@ -211,9 +211,15 @@ def add_real_estate(g: Graph, row: dict) -> Node:
     #-----
 
 
-    district: Node = _create_district(row["district"], row["province"])
-    province: Node = _create_province(row["province"])
+    # Mariano: ¿Cómo afectaría esto al grafo? --> 'if_row_exists(...)'
+    #          ¿Deberían ponerse los datos en un
+    #           valor basura, o debería evitarse que
+    #           se creen los grafos?
+    district: Node = _create_district(if_row_exists(row, "district"), if_row_exists(row, "province"))
+    province: Node = _create_province(if_row_exists(row, "province"))
     
+    # Mariano: ¿Por qué no se unifica esto ('barrio' y 'neighborhood')?
+    #          ¿Sinónimos?
     barrio= None
     if row.get("neighborhood"):
         barrio= str(row["neighborhood"])
@@ -279,6 +285,7 @@ def add_real_estate(g: Graph, row: dict) -> Node:
             if value:
                 add_feature(g, land, s, value, dateparser.parse(row.get("date_ave")))
     if (row.get("medidas")):
+        # # Mariano: "date_ave" no existe en el documento
         add_dimensiones(g, land, str(row.get("medidas")), dateparser.parse(row.get("date_ave")))
 
     #add features to BUILDING
@@ -475,3 +482,13 @@ def add_room(g: Graph, space: Node, row: dict, room: str, room_class: Node) -> N
         r: Node = _create_room()
         g.add((r, RDF.type, room_class))
         g.add((space, BRICK.hasPart, r))
+
+# Mariano
+#          MÉTODO PARA PROBAR VALORES DE FILAS
+#          Y QUE NO TIRE ERROR EL CÓDIGO
+def if_row_exists(row: dict, key: str):
+    try:
+        temp_var = row[key]
+    except:
+        temp_var = "empty"
+    return temp_var

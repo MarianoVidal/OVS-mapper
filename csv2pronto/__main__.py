@@ -44,4 +44,10 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print("ERROR: ", e)
+        print("TIPO DE EXCEPCIÓN: ", type(e))
+        import traceback
+        traceback.print_exc()
