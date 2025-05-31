@@ -10,6 +10,16 @@ class NoneLiteral(Literal):
     def __len__(self):
         return 0
 
+    # Mariano: Declaré esta función en esta clase
+    #          para que cada vez que se intente
+    #          realizar un replace con un objeto
+    #          de este tipo, no incurra en lógica
+    #          errónea.
+    #
+    #          Consultar si está bien
+    def replace(*args, **kwargs):
+        return None
+
 
 class NoneNode(BNode):
     """
