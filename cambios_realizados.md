@@ -1,6 +1,7 @@
 # Cambios realizados y comentarios
 ## 31/5/25
 - Agregué dos funciones al final del archivo ['converter.py'](./csv2pronto/src/converter.py) que verifican que se pueda obtener el valor de una fila, y si no se puede, devuelve un valor [`NoneLiteral`](./csv2pronto/src/null_objects/null_objects.py)
+  - NoneLiteral es una clase que representa el Literal de un valor nulo
   - TRY_IF_ROW_EXISTS(row, encabezado) --> Intenta obtener un valor row.get(encabezado), y si no devuelve NoneLiteral
   - TRY_OBTAIN_DATE(row, encabezado) --> Intenta obtener un valor fecha de row.get(encabezado), y si no devuelve NoneLiteral
 - Reemplacé algunas llamadas a la función row.get(encabezado) con estas nuevas funciones
