@@ -218,16 +218,9 @@ def add_real_estate(g: Graph, row: dict) -> Node:
     district: Node = _create_district(if_row_exists(row, "district"), if_row_exists(row, "province"))
     province: Node = _create_province(if_row_exists(row, "province"))
     
-    # Mariano: ¿Por qué no se unifica esto ('barrio' y 'neighborhood')?
-    #          ¿Sinónimos?
-    barrio= None
-    if row.get("neighborhood"):
-        barrio= str(row["neighborhood"])
-    elif row.get("barrio"):
-        barrio= str(row["barrio"])
-    
+    # Mariano: Simplifiqué el bloque if
+    barrio = row.get("neighborhood") or row.get("barrio")
     neighborhood : Node = _create_neighborhood(province, district, barrio)
-
 
     g.add((district, RDF.type, IO.City))
     g.add((district, RDFS.label, String(row.get("district"))))
