@@ -24,6 +24,8 @@ REC = SafeNamespace("https://w3id.org/rec#")
 TIME = SafeNamespace("http://www.w3.org/2006/time#")
 BRICK = SafeNamespace("https://brickschema.org/schema/Brick#")
 
+# CONSTANTS
+NO_VALUE = "empty"
 
 def create_graph_from_chunk(df: pd.DataFrame, graph, idx, destination, format) -> Graph:
     """
@@ -229,9 +231,9 @@ def add_real_estate(g: Graph, row: dict) -> Node:
     g.add((province, RDFS.label, String(row.get("province"))))
 
     if row.get("address"):
-        add_address(g, real_estate, IO.Scraper, str(row.get("address")), neighborhood, district, province, dateparser.parse(row.get("date_extracted")))
+        add_address(g, real_estate, IO.Scraper, str(row.get("address")), neighborhood, district, province, try_obtain_date(row, "date_published"))
     if row.get("direccion"):
-        add_address(g, real_estate, IO.AVE, str(row.get("direccion")), neighborhood, district, province, dateparser.parse(row.get("date_ave")))
+        add_address(g, real_estate, IO.AVE, str(row.get("direccion")), neighborhood, district, province, try_obtain_date(row, "date_ave"))
 
     # if row.get("neighborhood"):
     #     add_neighborhood(g, real_estate, IO.hasScraperValue, IO.hasScraperTime, str(row["neighborhood"]), district, province, dateparser.parse(row.get("date_extracted")))
@@ -276,10 +278,15 @@ def add_real_estate(g: Graph, row: dict) -> Node:
                 value = row[s]
 
             if value:
-                add_feature(g, land, s, value, dateparser.parse(row.get("date_ave")))
+                add_feature(g, land, s, value, try_obtain_date(row, "date_ave"))
     if (row.get("medidas")):
-        # # Mariano: "date_ave" no existe en el documento
-        add_dimensiones(g, land, str(row.get("medidas")), dateparser.parse(row.get("date_ave")))
+        # Mariano: "date_ave" no existe en el documento
+        #           Habría que ver si se tiene que utilizar
+        #           una fecha por defecto en el caso de que
+        #           esta no se encuentre, o si tenemos que
+        #           utilizar una de las otras fechas que
+        #           están en el csv, como la del scrapper
+        add_dimensiones(g, land, str(row.get("medidas")), try_obtain_date(row, "date_ave"))
 
     #add features to BUILDING
     for s in ["es_monetizable", "a_demoler"]:
@@ -290,7 +297,7 @@ def add_real_estate(g: Graph, row: dict) -> Node:
                 value = row[s]
 
             if value:
-                add_feature(g, building, s, value, dateparser.parse(row.get("date_ave")))
+                add_feature(g, building, s, value, try_obtain_date(row, "date_ave"))
 
     #add features to REAL ESTATE
     for s in ["es_multioferta", "preventa", "posesion"]:
@@ -301,7 +308,7 @@ def add_real_estate(g: Graph, row: dict) -> Node:
                 value = row[s]
 
             if value:
-                add_feature(g, real_estate, s, value, dateparser.parse(row.get("date_ave")))
+                add_feature(g, real_estate, s, value, try_obtain_date(row, "data_ave"))
 
         
 
@@ -369,7 +376,7 @@ def add_dimensiones(g: Graph, land: Node, value: str, date: datetime|None) -> No
 
     return dimensionsValue
 
-def add_address(g: Graph, real_estate: Node, origin: URIRef, address: str, neighborhood: Node, district: Node, province: Node, date: datetime | None) -> Node:
+def add_address(g: Graph, real_estate: Node, origin: URIRef, address: str, neighborhood: Node, district: Node, province: Node, date: datetime|None) -> Node:
     """Add address to the graph g and return the address's Node."""
     addressValue: Node = BNode()
     featureAddress: Node = create_feature(real_estate, "address")
@@ -477,11 +484,31 @@ def add_room(g: Graph, space: Node, row: dict, room: str, room_class: Node) -> N
         g.add((space, BRICK.hasPart, r))
 
 # Mariano
-#          MÉTODO PARA PROBAR VALORES DE FILAS
-#          Y QUE NO TIRE ERROR EL CÓDIGO
+#          LOS SIGUIENTES MÉTODOS SIRVEN PARA
+#          PROBAR VALORES Y DEVOLVER EL SOLICITADO
+#          U OTRO POR DEFECTO EN CASO DE QUE HAYA
+#          UN ERROR. SI ESTO NO SIRVE, AL MENOS VA
+#          A QUEDAR COMO CÓDIGO MODULARIZADO
+
+# IF_ROW_EXISTS(fila, encabezado)
+#          MÉTODO PARA OBTENER UNA FILA SI 
+#          EXISTE Y QUE NO TIRE ERROR EL CÓDIGO
 def if_row_exists(row: dict, key: str):
     try:
         temp_var = row[key]
     except:
-        temp_var = "empty"
+        temp_var = NO_VALUE
     return temp_var
+
+# TRY_OBTAIN_DATE(fila, encabezado)
+#          MÉTODO PARA INTENTAR OBTENER UNA
+#          FECHA DEL DATE_AVE SI HAY UNA, Y
+#          SI NO, IR A OTRA OPCIÓN DEFAULT
+def try_obtain_date(row: dict, key: str):
+    try:
+        temp_date = dateparser.parse(row.get(key))
+    except:
+        # No me gusta que esté esta fecha por defecto
+        # pero por el momento no sé que otra poner
+        temp_date = datetime(2000, 1, 1, 0, 0, 0)
+    return temp_date
