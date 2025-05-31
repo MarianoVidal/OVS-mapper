@@ -12,7 +12,7 @@ from . import Node
 from .faker.faker import Faker
 from .incrementals.incrementals import Incremental
 from .null_objects.factory import Boolean, DateTime, Double, Float, Integer, String
-from .null_objects.null_objects import NoneNode
+from .null_objects.null_objects import NoneLiteral, NoneNode
 from .null_objects.safe_objects import SafeGraph, SafeNamespace
 from .wrappers.wrappers import default_to_incremental, default_to_NoneNode
 
@@ -23,9 +23,6 @@ GR = SafeNamespace("http://purl.org/goodrelations/v1#")
 REC = SafeNamespace("https://w3id.org/rec#")
 TIME = SafeNamespace("http://www.w3.org/2006/time#")
 BRICK = SafeNamespace("https://brickschema.org/schema/Brick#")
-
-# CONSTANTS
-NO_VALUE = "empty"
 
 def create_graph_from_chunk(df: pd.DataFrame, graph, idx, destination, format) -> Graph:
     """
@@ -213,12 +210,12 @@ def add_real_estate(g: Graph, row: dict) -> Node:
     #-----
 
 
-    # Mariano: ¿Cómo afectaría esto al grafo? --> 'if_row_exists(...)'
+    # Mariano: ¿Cómo afectaría esto al grafo? --> 'try_if_row_exists(...)'
     #          ¿Deberían ponerse los datos en un
-    #           valor basura, o debería evitarse que
-    #           se creen los grafos?
-    district: Node = _create_district(if_row_exists(row, "district"), if_row_exists(row, "province"))
-    province: Node = _create_province(if_row_exists(row, "province"))
+    #           valor basura (NoneLiteral), o debería 
+    #           evitarse que se creen los grafos?
+    district: Node = _create_district(try_if_row_exists(row, "district"), try_if_row_exists(row, "province"))
+    province: Node = _create_province(try_if_row_exists(row, "province"))
     
     # Mariano: Simplifiqué el bloque if
     barrio = row.get("neighborhood") or row.get("barrio")
@@ -411,6 +408,11 @@ def add_feature(g: Graph, space: Node, featureName :str, value, date: datetime|N
     feature: Node = create_feature(space, featureName)
     dateNode: Node = BNode() 
     
+    # Mariano: Esta lógica condicional podríamos manejarla
+    #          desde un solo lugar, utilizando wrappers para
+    #          los primitivos, y métodos abstractos para que
+    #          cada wrapper implemente por su cuenta. Pero
+    #          quizás no sea necesario
     g.add((featureValue, RDF.type, RDFS.Literal)) # ⸘Literal‽
     if (type(value)==int):
         g.add((featureValue, RDFS.label, Integer(value)))
@@ -490,17 +492,17 @@ def add_room(g: Graph, space: Node, row: dict, room: str, room_class: Node) -> N
 #          UN ERROR. SI ESTO NO SIRVE, AL MENOS VA
 #          A QUEDAR COMO CÓDIGO MODULARIZADO
 
-# IF_ROW_EXISTS(fila, encabezado)
+# // IF_ROW_EXISTS(fila, encabezado)
 #          MÉTODO PARA OBTENER UNA FILA SI 
 #          EXISTE Y QUE NO TIRE ERROR EL CÓDIGO
-def if_row_exists(row: dict, key: str):
+def try_if_row_exists(row: dict, key: str):
     try:
         temp_var = row[key]
     except:
-        temp_var = NO_VALUE
+        temp_var = NoneLiteral
     return temp_var
 
-# TRY_OBTAIN_DATE(fila, encabezado)
+# // TRY_OBTAIN_DATE(fila, encabezado)
 #          MÉTODO PARA INTENTAR OBTENER UNA
 #          FECHA DEL DATE_AVE SI HAY UNA, Y
 #          SI NO, IR A OTRA OPCIÓN DEFAULT
@@ -508,7 +510,7 @@ def try_obtain_date(row: dict, key: str):
     try:
         temp_date = dateparser.parse(row.get(key))
     except:
-        # No me gusta que esté esta fecha por defecto
+        # No me gusta que esté en NoneLiteral por defeto
         # pero por el momento no sé que otra poner
-        temp_date = datetime(2000, 1, 1, 0, 0, 0)
+        temp_date = NoneLiteral
     return temp_date
