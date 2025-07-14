@@ -11,6 +11,9 @@ from joblib import Parallel, delayed
 def main() -> None:
     args: argparse.Namespace = parse_args()
     
+    # Recibir la función adecuada
+    es_ave = True if args.ave else False
+
     with open(args.source, "r", encoding="utf-8") as csv_file:
         graph: rdflib.Graph = rdflib.Graph()
 
@@ -24,6 +27,14 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+
+    modos = parser.add_mutually_exclusive_group(required=True)
+    modos.add_argument(
+        "-A", "--ave", help="Convert csv to graph using convert ave", action="store_true"
+    )
+    modos.add_argument(
+        "-S", "--scraper", help="Convert csv to graph using convert scrapper", action="store_true"
+    )
 
     parser.add_argument(
         "-s", "--source", help="CSV file to convert", required=True, type=str
