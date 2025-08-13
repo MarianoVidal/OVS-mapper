@@ -63,8 +63,9 @@ def create_graph(row: dict) -> Graph:
     return g
 
 
-def add_listing(g: Graph, row: dict) -> Node:
+def add_listing(g: Graph, row: dict, mode: str) -> Node:
     """Add listing to the graph `g` and return the listing's `Node`."""
+    """Necesita que se le pase el modo en el que corre el programa como parámetro"""
 
     @default_to_incremental(PR, Incremental.LISTING)
     def _create_listing():
@@ -73,53 +74,52 @@ def add_listing(g: Graph, row: dict) -> Node:
     listing: Node = _create_listing()
     g.add((listing, RDF.type, PR.RealEstateListing))
 
-    if row.get("url"):
-        g.add((listing, SIOC.link, URIRef(row["url"])))
-    g.add((listing, RDFS.label, String(row.get("title"))))
-    # g.add((listing, IO.descripcion, String(row.get("description")))) #TODO: cambiar comment
+    if (mode == 'scraper'):
+        if row.get("url"):
+            g.add((listing, SIOC.link, URIRef(row["url"])))
+        g.add((listing, RDFS.label, String(row.get("title"))))
+        # g.add((listing, IO.descripcion, String(row.get("description")))) #TODO: cambiar comment
+        ###
 
-    ###
+        if row.get("transaction"):
+            buisness_func = (
+                GR.Sell if row["transaction"].lower() == "venta" else GR.LeaseOut
+            )
+            g.add((listing, GR.hasBusinessFunction, buisness_func))
 
-    if row.get("transaction"):
-        buisness_func = (
-            GR.Sell if row["transaction"].lower() == "venta" else GR.LeaseOut
-        )
-        g.add((listing, GR.hasBusinessFunction, buisness_func))
+        site: Node = PR[row["site"]]
+        g.add((site, RDF.type, SIOC.Site))
+        g.add((listing, SIOC.has_space, site)) #TODO: cambiar has_space
+        g.add((site, SIOC.space_of, listing)) #TODO: cambiar space_of
 
-    site: Node = PR[row["site"]]
-    g.add((site, RDF.type, SIOC.Site))
-    g.add((listing, SIOC.has_space, site)) #TODO: cambiar has_space
-    g.add((site, SIOC.space_of, listing)) #TODO: cambiar space_of
-
+    # Mariano: Entiendo que esto no estaría dentro de un condicional
     g.add((listing, SIOC.id, String(row.get("listing_id"))))
 
-    if row.get("date_extracted"):
-        date = dateparser.parse(row["date_extracted"])
-        g.add((listing, SIOC.read_at, DateTime(date)))
+    # Mariano: Estos datos son del Scraper
+    if (mode == 'scraper'):
+        if row.get("date_extracted"):
+            date = dateparser.parse(row["date_extracted"])
+            g.add((listing, SIOC.read_at, DateTime(date)))
 
-    if row.get("date_published"):
-        date = dateparser.parse(row["date_published"])
-        g.add((listing, DC.date, DateTime(date)))
-        
+        if row.get("date_published"):
+            date = dateparser.parse(row["date_published"])
+            g.add((listing, DC.date, DateTime(date)))
+ 
+        if row.get("price") and row.get("currency"):
+            price: Node = add_price(g, listing, row["price"], row["currency"], "BASE", dateparser.parse(row["date_extracted"]))
+            g.add((listing, IO.hasFeature, price))
 
-    if row.get("price") and row.get("currency"):
-        price: Node = add_price(g, listing, row["price"], row["currency"], "BASE", dateparser.parse(row["date_extracted"]))
-        g.add((listing, IO.hasFeature, price))
-
-    if row.get("maintenance_fee") and row.get("maintenance_fee_currency"):
-        expenses: Node = add_price(
-            g,
-            listing,
-            row.get("maintenance_fee", ""),
-            row.get("maintenance_fee_currency", ""),
-            "MAINTENANCE FEE",
-            dateparser.parse(row["date_extracted"])
-        )
-
-        g.add((listing, IO.hasFeature, expenses))
-
-    ###
-
+        if row.get("maintenance_fee") and row.get("maintenance_fee_currency"):
+            expenses: Node = add_price(
+                g,
+                listing,
+                row.get("maintenance_fee", ""),
+                row.get("maintenance_fee_currency", ""),
+                "MAINTENANCE FEE",
+                dateparser.parse(row["date_extracted"])
+            )
+            g.add((listing, IO.hasFeature, expenses))
+            
     return listing
 
 
@@ -142,12 +142,8 @@ def add_price(g: Graph, listing:Node, value: float, currency: str, p_type: str, 
     g.add((dateNode, RDF.type, TIME.Instant))
     g.add((dateNode, TIME.inXSDDateTimeStamp, DateTime(date)))
     g.add((featurePrice, TIME.hasTime, dateNode))
-    
-
 
     return featurePrice
-
-
 
 def add_agent(g: Graph, row: dict) -> tuple[Node, Node]:
     """
@@ -177,7 +173,7 @@ def add_agent(g: Graph, row: dict) -> tuple[Node, Node]:
     return agent, account
 
 
-def add_real_estate(g: Graph, row: dict) -> Node:
+def add_real_estate(g: Graph, row: dict, mode: str) -> Node:
     """
     Add real estate to the graph `g` and return the real estate's
     `Node`.
@@ -209,17 +205,14 @@ def add_real_estate(g: Graph, row: dict) -> Node:
     g.add((point, REC.coordinates, String(f"[{row.get('latitude')},{row.get('longitude')}]")))
     #-----
 
-
-    # Mariano: ¿Cómo afectaría esto al grafo? --> 'try_if_row_exists(...)'
-    #          ¿Deberían ponerse los datos en un
-    #           valor basura (NoneLiteral), o debería 
-    #           evitarse que se creen los grafos?
     district: Node = _create_district(try_if_row_exists(row, "district"), try_if_row_exists(row, "province"))
     province: Node = _create_province(try_if_row_exists(row, "province"))
     
-    # Mariano: Simplifiqué el bloque if
-    barrio = row.get("neighborhood") or row.get("barrio")
-    neighborhood : Node = _create_neighborhood(province, district, barrio)
+    # Mariano: Conseguir barrio
+    if (mode == "ave"):
+        neighborhood : Node = _create_neighborhood(province, district, row.get("barrio"))
+    elif (mode == "scraper"):
+        neighborhood : Node = _create_neighborhood(province, district, row.get("neighborhood"))
 
     g.add((district, RDF.type, IO.City))
     g.add((district, RDFS.label, String(row.get("district"))))
@@ -227,111 +220,85 @@ def add_real_estate(g: Graph, row: dict) -> Node:
     g.add((province, RDF.type, IO.Province))
     g.add((province, RDFS.label, String(row.get("province"))))
 
-    if row.get("address"):
+    # Mariano: Conseguir dirección
+    if (mode == "scraper"):
         add_address(g, real_estate, IO.Scraper, str(row.get("address")), neighborhood, district, province, try_obtain_date(row, "date_published"))
-    if row.get("direccion"):
+    elif (mode == "ave"):
         add_address(g, real_estate, IO.AVE, str(row.get("direccion")), neighborhood, district, province, try_obtain_date(row, "date_ave"))
-
-    # if row.get("neighborhood"):
-    #     add_neighborhood(g, real_estate, IO.hasScraperValue, IO.hasScraperTime, str(row["neighborhood"]), district, province, dateparser.parse(row.get("date_extracted")))
-    # if row.get("barrio"):
-    #     add_neighborhood(g, real_estate, IO.hasAVEValue, IO.hasAVETime, str(row["barrio"]), district, province, dateparser.parse(row.get("date_ave")))
-
     
     g.add((real_estate, REC.includes, land))
     g.add((real_estate, REC.includes, building))
     g.add((land, BRICK.hasPart, building))
 
-
-    # g.add((real_estate, REC.locatedIn, district))
-    # g.add((real_estate, REC.locatedIn, province))
     g.add((neighborhood, REC.locatedIn, district))
 
     g.add((district, REC.locatedIn, province))
-    #---
 
-    # if row.get("year_built"):
-    #     g.add((space, SDO.yearBuilt, Integer(int(float(row.get("year_built", 0))))))
-
-    # property_mapping = {
-    #     "is_new_property": PR.is_brand_new,
-    #     "is_finished": PR.is_finished,
-    #     "is_studio_apartment": PR.is_studio_apartment,
-    # }
-
-    # for name, p in property_mapping.items():
-    #     g.add((space, p, Boolean(None if row.get(name) == "" else row.get(name))))
-
-    # g.add((space, PR.luminosity, String(row.get("luminosity"))))
-    # g.add((space, PR.orientation, String(row.get("orientation"))))
-    # g.add((space, PR.disposition, String(row.get("disposition"))))
-
+    # Mariano:  Las medidas y las características que tenga el terreno son del AVE
+    if (mode == 'ave'):
     # add features to LAND
-    for s in ["esquina", "pileta", "loteo_ph",  "indiviso", "irregular"]:
-        with suppress(KeyError):
-            if row[s] == "True":
-                value = row[s] == "True"
-            else:
-                value = row[s]
+        for s in ["esquina", "pileta", "loteo_ph",  "indiviso", "irregular"]:
+            with suppress(KeyError):
+                if row[s] == "True":
+                    value = row[s] == "True"
+                else:
+                    value = row[s]
 
-            if value:
-                add_feature(g, land, s, value, try_obtain_date(row, "date_ave"))
-    if (row.get("medidas")):
-        # Mariano: "date_ave" no existe en el documento
-        #           Habría que ver si se tiene que utilizar
-        #           una fecha por defecto en el caso de que
-        #           esta no se encuentre, o si tenemos que
-        #           utilizar una de las otras fechas que
-        #           están en el csv, como la del scrapper
-        add_dimensiones(g, land, str(row.get("medidas")), try_obtain_date(row, "date_ave"))
+                if value:
+                    add_feature(g, land, s, value, try_obtain_date(row, "date_ave"))
 
-    #add features to BUILDING
-    for s in ["es_monetizable", "a_demoler"]:
-        with suppress(KeyError):
-            if row[s] == "True":
-                value = row[s] == "True"
-            else:
-                value = row[s]
+        if (row.get("medidas")):
+            # Mariano: "date_ave" no existe en el documento
+            #           Habría que ver si se tiene que utilizar
+            #           una fecha por defecto en el caso de que
+            #           esta no se encuentre, o si tenemos que
+            #           utilizar una de las otras fechas que
+            #           están en el csv, como la del scrapper
+            add_dimensiones(g, land, str(row.get("medidas")), try_obtain_date(row, "date_ave"))
 
-            if value:
-                add_feature(g, building, s, value, try_obtain_date(row, "date_ave"))
+        #add features to BUILDING
+        for s in ["es_monetizable", "a_demoler"]:
+            with suppress(KeyError):
+                if row[s] == "True":
+                    value = row[s] == "True"
+                else:
+                    value = row[s]
 
-    #add features to REAL ESTATE
-    for s in ["es_multioferta", "preventa", "posesion"]:
-        with suppress(KeyError):
-            if row[s] == "True":
-                value = row[s] == "True"
-            else:
-                value = row[s]
+                if value:
+                    add_feature(g, building, s, value, try_obtain_date(row, "date_ave"))
 
-            if value:
-                add_feature(g, real_estate, s, value, try_obtain_date(row, "data_ave"))
+        #add features to REAL ESTATE
+        for s in ["es_multioferta", "preventa", "posesion"]:
+            with suppress(KeyError):
+                if row[s] == "True":
+                    value = row[s] == "True"
+                else:
+                    value = row[s]
 
-        
+                if value:
+                    add_feature(g, real_estate, s, value, try_obtain_date(row, "data_ave"))
 
-    # features: dict = ast.literal_eval(row.get("features") or "{}")
-    # for feature, value in features.items():
-    #     add_feature(g, real_estate, feature, value, dateparser.parse(row.get("date_extracted")))
-    
-    # add surfaces
-    for s in ["total", "covered", "uncovered", "land"]:
-        with suppress(KeyError):
-            value = row[f"{s}_surface"] or row[f"reconstructed_{s}_surface"]
-            unit = row[f"{s}_surface_unit"] or row[f"reconstructed_{s}_surface_unit"]
+    if (mode == 'scraper'):
+        # add surfaces
+        for s in ["total", "covered", "uncovered", "land"]:
+            with suppress(KeyError):
+                value = row[f"{s}_surface"] or row[f"reconstructed_{s}_surface"]
+                unit = row[f"{s}_surface_unit"] or row[f"reconstructed_{s}_surface_unit"]
 
-            if value and unit:
-                add_surface(g, land, value, unit, s, dateparser.parse(row.get("date_extracted")))
+                if value and unit:
+                    add_surface(g, land, value, unit, s, dateparser.parse(row.get("date_extracted")))
 
-    # add amount of rooms
-    g.add((building, PR.has_number_of_rooms, Integer(row.get("room_amnt"))))
-    rooms: dict[str, Node] = {
-        "bath": REC.Bathroom,
-        "garage": REC.Garage,
-        "bed": REC.Bedroom,
-        "toilette": REC.Toilet,
-    }
-    for room, room_class in rooms.items():
-        add_room(g, building, row, room, room_class)
+        # add amount of rooms
+        g.add((building, PR.has_number_of_rooms, Integer(row.get("room_amnt"))))
+        rooms: dict[str, Node] = {
+            "bath": REC.Bathroom,
+            "garage": REC.Garage,
+            "bed": REC.Bedroom,
+            "toilette": REC.Toilet,
+        }
+
+        for room, room_class in rooms.items():
+            add_room(g, building, row, room, room_class)
    
     return real_estate
 
@@ -485,6 +452,66 @@ def add_room(g: Graph, space: Node, row: dict, room: str, room_class: Node) -> N
         g.add((r, RDF.type, room_class))
         g.add((space, BRICK.hasPart, r))
 
+# Mariano: Método nuevo que se me pidió implmentar
+def add_features_from_ave(g: Graph, row: dict, uri: str):
+    """Esta función agrega los campos que son del AVE"""
+
+    # Si hay foto
+    #      ¿Quizás podríamos agregar una función que
+    #       agregue la Feature (si es q es una)?
+    #
+    # Con el tema de los atributos que no aparecen ni
+    # en el archivo este ni en la ontología IO, qué
+    # hacemos? (ej: 'urb_semicerrada')
+    #
+    # Si queremos reunir la adición de los campos AVE
+    # en un solo método, habría que ver como resolver 
+    # el tema de las referencias, o si hay que resolverlo
+    # si quiera y lo estoy planteando mal.
+    
+    if row.get("fot"):
+        g.add(uri, PR.hasFOT, Boolean(row['fot']))
+    if row.get("description"):
+        g.add((uri, PR.description, String(row["description"])))
+    if row.get("barrio"):
+        neighborhood : Node = _create_neighborhood(province, district, row.get("barrio"))
+    if row.get("direccion"):
+        add_address(g, real_estate, IO.AVE, str(row.get("direccion")), neighborhood, district, province, try_obtain_date(row, "date_ave"))
+        # frentes 
+        # urb_semicerrada 
+    for s in ["esquina", "pileta", "loteo_ph",  "indiviso", "irregular"]:
+        with suppress(KeyError):
+            if row[s] == "True":
+                value = row[s] == "True"
+            else:
+                value = row[s]
+
+            if value:
+                add_feature(g, land, s, value, try_obtain_date(row, "date_ave"))
+
+    if (row.get("medidas")):
+        add_dimensiones(g, land, str(row.get("medidas")), try_obtain_date(row, "date_ave"))
+
+    for s in ["es_monetizable", "a_demoler"]:
+        with suppress(KeyError):
+            if row[s] == "True":
+                value = row[s] == "True"
+            else:
+                value = row[s]
+
+            if value:
+                add_feature(g, building, s, value, try_obtain_date(row, "date_ave"))
+
+    for s in ["es_multioferta", "preventa", "posesion"]:
+        with suppress(KeyError):
+            if row[s] == "True":
+                value = row[s] == "True"
+            else:
+                value = row[s]
+
+            if value:
+                add_feature(g, real_estate, s, value, try_obtain_date(row, "date_ave"))
+
 # Mariano
 #          LOS SIGUIENTES MÉTODOS SIRVEN PARA
 #          PROBAR VALORES Y DEVOLVER EL SOLICITADO
@@ -510,7 +537,7 @@ def try_obtain_date(row: dict, key: str):
     try:
         temp_date = dateparser.parse(row.get(key))
     except:
-        # No me gusta que esté en NoneLiteral por defeto
+        # No me gusta que esté en NoneLiteral por defecto
         # pero por el momento no sé que otra poner
         temp_date = NoneLiteral
     return temp_date
