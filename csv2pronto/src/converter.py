@@ -342,7 +342,7 @@ def _create_province(province:str):
 @default_to_NoneNode
 def _create_neighborhood(province:URIRef, district:URIRef, neighborhood:str):
     return IO[
-        f"neiborhood_{province.fragment}_{district.fragment}_{neighborhood}"
+        f"neighborhood_{province.fragment}_{district.fragment}_{neighborhood}"
     ]
 
 
