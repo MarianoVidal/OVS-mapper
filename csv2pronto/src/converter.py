@@ -345,7 +345,6 @@ def _create_neighborhood(province:URIRef, district:URIRef, neighborhood:str):
         f"neighborhood_{province.fragment}_{district.fragment}_{neighborhood}"
     ]
 
-
 def add_dimensiones(g: Graph, land: Node, value: str, date: datetime|None) -> Node:
     """Add dimensions to the graph g and return the surface's Node."""
     dimensionsValue: Node = BNode()
@@ -475,3 +474,104 @@ def add_room(g: Graph, space: Node, row: dict, room: str, room_class: Node) -> N
         r: Node = _create_room()
         g.add((r, RDF.type, room_class))
         g.add((space, BRICK.hasPart, r))
+
+def add_features_from_ave(g: Graph, row: dict):
+    """Esta función agrega los campos que son del AVE"""
+    """Para obtener las URIs necesitamos los siguientes valores:
+        1. El valor del atributo 'listing_id'
+        2. El valor del atributo 'site'
+    """
+    """¿Hace falta esta función realmente? Las funciones
+        de arriba ya de por sí hacen el trabajo de recuperar
+        las URIs si estas no existen"""
+
+    # ¿Estas funciones deberían estar afuera?
+    @default_to_incremental(PR, Incremental.LISTING)
+    def _create_listing():
+        return IO[f"listing_{row['site']}_{row['listing_id']}"]
+    
+    @default_to_incremental(PR, Incremental.REAL_ESTATE)
+    def _create_real_estate():
+        return IO[f"real_estate_{row['site']}_{row['listing_id']}"]
+
+    listing: Node = _create_listing()
+    real_estate: Node = _create_real_estate()
+
+    # Agregar atributos para el listing
+    add_listing_features_from_ave(g, row, listing)
+
+    # Agregar atributos relacionados con el real_estate
+    add_real_estate_features_from_ave(g, row, real_estate)
+
+def add_real_estate_features_from_ave(g, row, real_estate: Node):
+
+    @default_to_incremental(PR, Incremental.SPACE)
+    def _create_space(s_type: str):
+        return IO[f"space_{s_type}_{row['site']}_{row['listing_id']}"]
+    
+    land: Node = _create_space("land")
+    building: Node = _create_space("building")
+
+    @default_to_NoneNode
+    def _create_district(province:str, district:str):
+        return IO[f'district_{province.replace(" ", "_")}_{district.replace(" ", "_")}']
+
+    @default_to_NoneNode
+    def _create_province(province:str):
+        return IO[f'province_{province.replace(" ", "_")}']
+
+    @default_to_NoneNode
+    def _create_neighborhood(province:URIRef, district:URIRef, neighborhood:str):
+        return IO[
+            f"neighborhood_{province.fragment}_{district.fragment}_{neighborhood}"
+           ]
+
+    # Hay que "recuperar" la información de la provincia, el distrito, la tierra y el edificio
+    district: Node = _create_district()
+    province: Node = _create_province()
+
+    if row.get("barrio"):
+        neighborhood : Node = _create_neighborhood(province, district, row.get("barrio"))
+    if row.get("direccion"):
+        add_address(g, real_estate, IO.AVE, str(row.get("direccion")), neighborhood, district, province, dateparser.parse(row.get("date_ave")))
+        # frentes 
+        # urb_semicerrada 
+
+    for s in ["esquina", "pileta", "loteo_ph",  "indiviso", "irregular"]:
+        with suppress(KeyError):
+            if row[s] == "True":
+                value = row[s] == "True"
+            else:
+                value = row[s]
+
+            if value:
+                add_feature(g, land, s, value, dateparser.parse(row.get("date_ave")))
+
+    if (row.get("medidas")):
+        add_dimensiones(g, land, str(row.get("medidas")), dateparser.parse(row.get("date_ave")))
+
+    for s in ["es_monetizable", "a_demoler"]:
+        with suppress(KeyError):
+            if row[s] == "True":
+                value = row[s] == "True"
+            else:
+                value = row[s]
+
+            if value:
+                add_feature(g, building, s, value, dateparser.parse(row.get("date_ave")))
+
+    for s in ["es_multioferta", "preventa", "posesion"]:
+        with suppress(KeyError):
+            if row[s] == "True":
+                value = row[s] == "True"
+            else:
+                value = row[s]
+
+            if value:
+                add_feature(g, real_estate, s, value, dateparser.parse(row.get("date_ave")))
+
+def add_listing_features_from_ave(g, row, listing):
+    if row.get("fot"):
+        g.add(listing, PR.hasFOT, Boolean(row['fot']))
+    if row.get("description"):
+        g.add((listing, PR.description, String(row["description"])))
